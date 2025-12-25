@@ -42,11 +42,12 @@ finder.find_opposite("happy", top_k=10)
 ## How It Works
 
 1. **CLIP Model**: Uses OpenAI's CLIP model (ViT-B/32) to get 512-dimensional semantic embeddings
-2. **Token Vocabulary**: Loads CLIP's BPE token vocabulary (~49,000 tokens)
-3. **Embedding Computation**: Pre-computes embeddings for all tokens (done once, cached)
-4. **Negation**: The opposite embedding is computed as `-1 * original_embedding`
-5. **Search**: Computes cosine similarity between opposite embedding and all token embeddings
-6. **Results**: Returns the top-k tokens closest to the opposite embedding
+2. **Token Embeddings**: Directly accesses CLIP's token embedding layer (instant - no encoding needed!)
+3. **Negation**: The opposite embedding is computed as `-1 * original_embedding`
+4. **Search**: Computes cosine similarity between opposite embedding and all ~49K token embeddings
+5. **Results**: Returns the top-k tokens closest to the opposite embedding
+
+**Key optimization**: Instead of encoding 49K tokens as text (slow), we directly use the model's token embedding weights (instant!)
 
 ## Example
 
@@ -56,12 +57,8 @@ Enter a word: hot
 Finding opposite embedding for: 'hot'
 ============================================================
 
-Loading CLIP token vocabulary...
-Loaded 49408 tokens from CLIP vocabulary
-Computing embeddings for 49408 CLIP tokens...
-This may take a few minutes...
-100%|████████████████████████| 193/193 [02:15<00:00,  1.42it/s]
-Token embeddings computed! Shape: (49408, 512)
+Extracting token embeddings from CLIP model...
+Got 49408 token embeddings directly from model!
 
 Original embedding shape: (512,)
 Original embedding (first 5 dims): [ 0.0234 -0.0123  0.0456 ...]
@@ -77,7 +74,7 @@ Top 10 tokens from CLIP vocabulary closest to the opposite embedding:
  ...
 ```
 
-**Note**: The first run will take 2-3 minutes to compute embeddings for all tokens, but this is cached for subsequent searches.
+**Note**: Token embeddings are extracted directly from the model (instant!). First search extracts them, then all subsequent searches are cached.
 
 ## License
 
