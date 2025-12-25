@@ -25,32 +25,8 @@ class OppositeEmbeddingFinder:
         self.model, self.preprocess = clip.load(model_name, device=self.device)
         self.model.eval()
 
-        # Get CLIP's token vocabulary
-        print("Loading CLIP token vocabulary...")
-        self.token_vocabulary = self._load_clip_vocabulary()
-        print(f"Loaded {len(self.token_vocabulary)} tokens from CLIP vocabulary")
-
         self.token_embeddings = None
-
-    def _load_clip_vocabulary(self) -> List[str]:
-        """Load CLIP's BPE token vocabulary."""
-        # Access the tokenizer's encoder (token -> id mapping)
-        tokenizer = clip.simple_tokenizer.SimpleTokenizer()
-
-        # Get all tokens from the encoder
-        # The encoder is a dict mapping byte-pair tokens to IDs
-        tokens = list(tokenizer.encoder.keys())
-
-        # Clean up tokens - remove special byte-pair encoding artifacts
-        cleaned_tokens = []
-        for token in tokens:
-            # Replace the special </w> marker that indicates end of word
-            clean_token = token.replace('</w>', '')
-            # Only include tokens that have actual content
-            if clean_token and len(clean_token) > 0:
-                cleaned_tokens.append(clean_token)
-
-        return cleaned_tokens
+        print("Model loaded! Ready to find opposite embeddings.")
 
     def get_text_embedding(self, text: str) -> np.ndarray:
         """
@@ -84,39 +60,32 @@ class OppositeEmbeddingFinder:
         opposite = opposite / np.linalg.norm(opposite)
         return opposite
 
-    def compute_token_embeddings(self, batch_size: int = 256):
+    def get_token_embeddings(self):
         """
-        Pre-compute embeddings for all CLIP tokens.
+        Get the token embedding weights directly from CLIP's model.
+        This is instant - no need to encode each token individually!
 
-        Args:
-            batch_size: Number of tokens to process in each batch
+        Returns:
+            Token embeddings from the model's embedding layer
         """
         if self.token_embeddings is not None:
-            return
+            return self.token_embeddings
 
-        print(f"Computing embeddings for {len(self.token_vocabulary)} CLIP tokens...")
-        print("This may take a few minutes...")
+        print("Extracting token embeddings from CLIP model...")
 
-        embeddings = []
+        # Get the token embedding layer from CLIP's transformer
+        # The embedding layer contains the raw token embeddings
+        token_embedding_layer = self.model.token_embedding.weight
 
-        # Process tokens in batches for efficiency
-        for i in tqdm(range(0, len(self.token_vocabulary), batch_size)):
-            batch_tokens = self.token_vocabulary[i:i + batch_size]
+        # Get embeddings and normalize them
+        embeddings = token_embedding_layer.detach().cpu().numpy()
 
-            # Get embeddings for this batch
-            batch_embeddings = []
-            for token in batch_tokens:
-                try:
-                    emb = self.get_text_embedding(token)
-                    batch_embeddings.append(emb)
-                except Exception:
-                    # If a token can't be embedded, use zeros
-                    batch_embeddings.append(np.zeros(512))
+        # Normalize embeddings (same as CLIP does for text)
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        self.token_embeddings = embeddings / norms
 
-            embeddings.extend(batch_embeddings)
-
-        self.token_embeddings = np.array(embeddings)
-        print(f"Token embeddings computed! Shape: {self.token_embeddings.shape}")
+        print(f"Got {len(self.token_embeddings)} token embeddings directly from model!")
+        return self.token_embeddings
 
     def find_nearest_tokens(self, embedding: np.ndarray, top_k: int = 10) -> List[Tuple[str, float]]:
         """
@@ -129,14 +98,25 @@ class OppositeEmbeddingFinder:
         Returns:
             List of (token, similarity_score) tuples
         """
-        self.compute_token_embeddings()
+        # Get token embeddings from the model (instant!)
+        token_embeds = self.get_token_embeddings()
 
         # Compute cosine similarities
-        similarities = np.dot(self.token_embeddings, embedding)
+        similarities = np.dot(token_embeds, embedding)
 
         # Get top k
         top_indices = np.argsort(similarities)[::-1][:top_k]
-        results = [(self.token_vocabulary[idx], float(similarities[idx])) for idx in top_indices]
+
+        # Map back to token strings
+        tokenizer = clip.simple_tokenizer.SimpleTokenizer()
+        decoder = {v: k for k, v in tokenizer.encoder.items()}  # id -> token
+
+        results = []
+        for idx in top_indices:
+            token_str = decoder.get(idx, f"<unk_{idx}>")
+            # Clean up the token display
+            token_str = token_str.replace('</w>', '')
+            results.append((token_str, float(similarities[idx])))
 
         return results
 
@@ -186,9 +166,10 @@ def main():
     print("CLIP Opposite Embedding Finder")
     print("="*60)
     print("\nThis tool finds the 'opposite' of a word's embedding by")
-    print("negating its CLIP embedding vector and searching through")
-    print("CLIP's entire token vocabulary (~49K tokens) to find which")
-    print("tokens are closest to that opposite direction in embedding space.")
+    print("negating its CLIP embedding vector and searching CLIP's")
+    print("token embedding layer (~49K tokens) to find which tokens")
+    print("are closest to that opposite direction in embedding space.")
+    print("\nNote: Uses model's embedding layer directly - instant results!")
     print("\nType 'quit' or 'exit' to stop.\n")
 
     # Interactive loop
