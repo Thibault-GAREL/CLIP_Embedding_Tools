@@ -1,5 +1,7 @@
 # CLIP Embedding Tools
 
+![Logo Embedding Tools](img/Logo-Embedding_tools.png)
+
 Three tools for exploring word embeddings using CLIP (Contrastive Language-Image Pre-training):
 1. **Opposite Embedding Finder** - Find semantically opposite words
 2. **Embedding Arithmetic** - Perform vector operations (e.g., "man + kingdom ≈ king")
