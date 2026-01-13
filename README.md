@@ -9,7 +9,7 @@
 ![Contributions](https://img.shields.io/badge/contributions-welcome-orange.svg)
 
 <p align="center">
-  <img src="img/Logo-Embedding_tools.png" alt="Logo Embedding Tools">
+  <img src="img/Logo-Embedding_Tools.png" alt="Logo Embedding Tools">
 </p>
 
 ## 📝 Project Description
